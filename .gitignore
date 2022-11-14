@@ -4,3 +4,5 @@
 
 .idea/
 *.jsonl
+data/*.tsv
+raw_data/
