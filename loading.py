@@ -11,8 +11,8 @@ from sklearn.metrics import classification_report
 from models.base_sk import base_sk
 from argsparser import args
 from skeleton.sk_frame import sk_frame
-from utils import data_dir, cuda_available, eval_dir, save_all_step, ckpt_dir, get_bert_rep, meta_path, output_dir, \
-    add_noise
+from utils import data_dir, cuda_available, coauthor_eval_dir, save_all_step, ckpt_dir, get_bert_rep, \
+    coauthor_meta_path, output_dir, add_noise, baize_eval_dir, baize_meta_path
 
 
 def kfold_train(config, fold_data):
@@ -94,19 +94,18 @@ def kfold_train(config, fold_data):
     return classification_report(true, pred, digits=3, output_dict=True)
 
 
-def load_tensor(config):
-    articles = os.listdir(data_dir + eval_dir)
-
-    meta_df = pd.read_csv(meta_path, sep='\t', index_col=0)
+def load_coauthor(config):
+    articles = os.listdir(data_dir + coauthor_eval_dir)
+    meta_df = pd.read_csv(coauthor_meta_path, sep='\t', index_col=0)
     session2user = defaultdict(lambda: -1, dict(zip(list(meta_df.session_id), list(meta_df.user_id))))
     session2topic = defaultdict(lambda: 19, dict(zip(list(meta_df.session_id), list(meta_df.topic_id))))
 
     tensor_list = []
     for article in tqdm(articles):
-        df = pd.read_csv(data_dir + eval_dir + article, sep='\t', index_col=0).fillna('')
+        df = pd.read_csv(data_dir + coauthor_eval_dir + article, sep='\t', index_col=0).fillna('')
         if len(df) > config['action_num']:
             # quality label
-            label = df.iloc[config['action_num']][config['reward']]
+            label = df[config['reward']][config['action_num']]
 
             # user_id
             user_id = session2user[article.replace('.tsv', '')]
@@ -134,24 +133,19 @@ def load_tensor(config):
             ls = ['[SEP]'.join([op['trimmed'] for op in l]) for idx, l in enumerate(raw_ls)]
 
             acs_rep = get_bert_rep(acs).detach().cpu()
-            if config['noise_on_treatment']:
+            if config['noise_on_input']:
                 acs_rep[-1, :] = add_noise(acs_rep[-1, :])
-
             lcs_rep = get_bert_rep(ls).detach().cpu()
-
-            # separate l_i representation and accumulative context representation
-            sep_ls_rep = []
-            for l in ls:
-                sep_ls_rep.append(get_bert_rep(l.split('[SEP]')).detach().cpu())
             acc_rep = get_bert_rep([acc_cond]).detach().cpu()
 
             # counterfactual
             counter_a = df[config['target_counter_a']][config['action_num']]
             counter_a_rep = get_bert_rep([counter_a]).detach().cpu()
+            if config['noise_on_input']:
+                counter_a_rep = add_noise(counter_a_rep)
             counter_a_label = df[config['reward_counter']][config['action_num']]
 
-            outputs = {'acs': acs_rep, 'ls': lcs_rep, 'sep_ls': sep_ls_rep, 'acc_cond': acc_rep,
-                       'counter_a_rep': counter_a_rep}
+            outputs = {'acs': acs_rep, 'ls': lcs_rep, 'acc_cond': acc_rep, 'counter_a_rep': counter_a_rep}
             tensor_list.append((outputs, label, selects, article, user_id, topic_id, counter_a_label))
 
     config['total_user'] = len(set(session2user.values()))
@@ -159,9 +153,61 @@ def load_tensor(config):
     return tensor_list
 
 
+def load_baize(config):
+    articles = os.listdir(data_dir + baize_eval_dir)
+    meta_df = pd.read_csv(baize_meta_path, sep='\t', index_col=0)
+    session2language = meta_df.set_index('file')['language'].to_dict()
+
+    tensor_list = []
+    for article in tqdm(articles):
+        df = pd.read_csv(data_dir + baize_eval_dir + article, sep='\t', index_col=0).fillna('')
+        if len(df) >= config['action_num']:
+            # quality label
+            label = df[config['reward']][config['action_num']-1]
+
+            # topic id
+            topic_id = session2language[article.replace('.tsv', '')]
+
+            # a_i
+            cond_acs = list(df.a[:config['action_num'] - 1])
+            cond_acs = [a.strip() for a in cond_acs]
+            a = [df[config['target_a']][config['action_num'] - 1].strip()]
+            acs = cond_acs + a
+
+            # l_i
+            ls = list(df.l[:config['action_num']])
+
+            # accumulative context
+            acc_cond = ' '.join([item for pair in zip(ls, acs) for item in pair][:-1])
+
+            # representation of a_i, l_i, acc_cond
+            acs_rep = get_bert_rep(acs).detach().cpu()
+            if config['noise_on_input']:
+                acs_rep[-1, :] = add_noise(acs_rep[-1, :])
+            lcs_rep = get_bert_rep(ls).detach().cpu()
+            acc_rep = get_bert_rep([acc_cond]).detach().cpu()
+
+            # counterfactual
+            counter_a = df[config['target_counter_a']][config['action_num']-1]
+            counter_a_rep = get_bert_rep([counter_a]).detach().cpu()
+            if config['noise_on_input']:
+                counter_a_rep = add_noise(counter_a_rep)
+            counter_a_label = df[config['reward_counter']][config['action_num']-1]
+
+            outputs = {'acs': acs_rep, 'ls': lcs_rep, 'acc_cond': acc_rep, 'counter_a_rep': counter_a_rep}
+            tensor_list.append((outputs, label, None, article, None, topic_id, counter_a_label))
+
+    return tensor_list
+
+
 def load_kfold_data(config, kfold=5):
     print("Loading experimental data...")
-    raw_list = load_tensor(config)
+    raw_list = []
+    if config['data_name'] == 'coauthor':
+        raw_list = load_coauthor(config)
+    elif config['data_name'] == 'baize':
+        raw_list = load_baize(config)
+
     kf = KFold(n_splits=kfold, shuffle=True, random_state=16)
     kf.get_n_splits(raw_list)
     return {'data': raw_list, 'kfold': kf}
@@ -178,8 +224,9 @@ def load_model(config):
 
 def load_para():
     config = {'epoch': args.epoch, 'testgap': args.testgap, 'model': args.model, 'learner': args.learner,
-              'embedding': args.embedding, 'label': args.label, 'reward': args.reward, 'target_a': args.target_a,
-              'action_num': args.action_num, 'z_mode': args.z_mode, 'g_estimation': bool(args.g_estimation),
+              'data_name': args.data_name, 'embedding': args.embedding, 'label': args.label, 'reward': args.reward,
+              'target_a': args.target_a, 'action_num': args.action_num,
+              'z_mode': args.z_mode, 'g_estimation': bool(args.g_estimation),
 
               'decompose_a': bool(args.decompose_a), 'decompose_a_dim': args.decompose_a_dim,
               'decompose_a_model': args.decompose_a_model,
@@ -190,7 +237,7 @@ def load_para():
               'c_mode': args.c_mode, 'save_counterfactual': bool(args.save_counterfactual),
               'target_counter_a': args.target_counter_a, 'reward_counter': args.reward_counter,
 
-              'noise_on_treatment': bool(args.noise_on_treatment)}
+              'noise_on_input': bool(args.noise_on_input)}
 
     loss_function = nn.CrossEntropyLoss()
     optimizer = optim.Adam
@@ -201,10 +248,9 @@ def load_para():
     config['save_all_step'] = save_all_step[config['model']]
 
     save_name = '_'.join(
-        [config['model'], config['learner'], config['embedding'], config['label'], config['reward'],
-         str(config['action_num']), config['target_a'], 'decompose_a', str(config['decompose_a']), 'decompose_cond',
-         str(config['decompose_cond']), 'z_mode',
-         str(config['z_mode']), ])
+        [config['model'], config['learner'], config['data_name'], config['embedding'], config['label'],
+         config['reward'], str(config['action_num']), config['target_a'], 'decompose_a', str(config['decompose_a']),
+         'decompose_cond', str(config['decompose_cond']), 'z_mode', str(config['z_mode'])])
     if config['decompose_a']:
         save_name += '_decompose_a_model_' + config['decompose_a_model'] + '_decompose_a_dim_' + str(
             config['decompose_a_dim'])

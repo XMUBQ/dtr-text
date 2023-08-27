@@ -7,6 +7,7 @@ parser.add_argument('--model', type=str, default='vanilla')
 parser.add_argument('--learner', type=str, default='LIN')
 
 # data info
+parser.add_argument('--data_name', type=str, default='coauthor')
 parser.add_argument('--label', type=str, default='quality')
 parser.add_argument('--action_num', type=int, default=2)
 parser.add_argument('--target_a', type=str, default='causal_a')
@@ -38,7 +39,7 @@ parser.add_argument('--embedding', type=str, default='bert')
 # temp args
 parser.add_argument('--regularizer',type=float, default=1.0)
 parser.add_argument('--split',type=int,default=20)
-parser.add_argument('--noise_on_treatment', type=int, default=0)
+parser.add_argument('--noise_on_input', type=int, default=1)
 
 # vae unused temporarily
 parser.add_argument('--vae_arch', type=str, default='full')

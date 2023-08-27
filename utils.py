@@ -27,16 +27,18 @@ feature_model = feature_model.cuda()
 feature_model.eval()
 
 data_dir = 'data/'
-eval_dir = str(args.split) + 'split-dtr-data/'
-# eval_dir = 'altera1-dtr-data/'
-# eval_dir = 'temp-dtr-data/'
-print(eval_dir)
-count_dir = 'counterfactual/'
-y_dir = 'data/ps_label/partial_*_y.pkl'
 output_dir = 'results/'
 plot_dir = 'plot/'
 ckpt_dir = 'ckpt/'
-meta_path = 'data/metadata.tsv'
+
+# coauthor related path
+coauthor_eval_dir = str(args.split) + 'split-dtr-data/' # 'altera1-dtr-data/', 'temp-dtr-data/'
+coauthor_meta_path = 'data/metadata.tsv'
+
+# baize related path
+baize_eval_dir = 'baize_temp_dir/'
+baize_meta_path = 'data/baize/metadata.tsv'
+
 bert_dim = 768
 num_of_topic = 20
 
@@ -48,7 +50,7 @@ seq_action_dict['MLP'] = False
 # function
 def add_noise(outputs):
     noise = torch.randn(outputs.size())
-    mean, std_dev = 0, 1
+    mean, std_dev = 0, 1.8
     adjusted_noise = noise * std_dev + mean
     outputs = outputs + adjusted_noise
     return outputs
@@ -91,6 +93,7 @@ from models.sklearn_plus.sk_MLP import sk_MLP
 from models.sklearn_plus.sk_cVAE import sk_cVAE
 from models.sklearn_plus.sk_vanilla_VAE import sk_vanilla_VAE
 from models.sklearn_plus.sk_PCA import sk_PCA
+from models.sklearn_plus.sk_reconsVAE import sk_reconsVAE
 
 params = {'batch_size': 16, 'shuffle': False, 'drop_last': False, 'num_workers': 0}
 learner2params = {'LIN': {'random_state': 42, "solver": 'liblinear', "C": args.regularizer},
@@ -98,6 +101,6 @@ learner2params = {'LIN': {'random_state': 42, "solver": 'liblinear', "C": args.r
                   'MLP': {'input_size': (2 * args.action_num + 1) * bert_dim, 'output_size': 2, 'num_of_layer': 2,
                           'hidden': 128}}
 learner2modelptr = {'LIN': LogisticRegression, 'DET': DecisionTreeClassifier, 'MLP': sk_MLP}
-decompose_a_modelptr = {'VAE': sk_vanilla_VAE, 'cVAE': sk_cVAE, 'PCA': sk_PCA}
+decompose_a_modelptr = {'VAE': sk_vanilla_VAE, 'cVAE': sk_cVAE, 'PCA': sk_PCA, 'reconsVAE': sk_reconsVAE}
 
 save_all_step = defaultdict(lambda: False)
