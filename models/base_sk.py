@@ -59,7 +59,8 @@ class base_sk(sk_model):
             input_feat = ls
 
         if self.z_mode == 6:
-            input_feat = torch.cat([condition_dict['condition'], acs[:, self.step * bert_dim:]], dim=1)
+            input_feat = acs[:, bert_dim:self.step * bert_dim]
+            print(input_feat.shape)
 
         if self.z_mode == 7:
             rand_feat = torch.rand(acs.shape[0], self.step * bert_dim)
@@ -116,7 +117,8 @@ class base_sk(sk_model):
             counter_feat = ls
 
         if self.c_mode == 6:
-            counter_feat = torch.cat([condition_dict['condition'], counter_a], dim=1)
+            counter_feat = acs[:, 1:-1, ]
+            print(acs.shape, counter_feat.shape)
 
         if self.c_mode == 7:
             rand_feat = torch.rand(acs.shape[0], self.step * bert_dim)

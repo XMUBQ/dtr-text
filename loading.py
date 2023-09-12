@@ -68,8 +68,8 @@ def kfold_train(config, fold_data):
     df['true'] = true
     if config['g_estimation']:
         g_estimation = np.concatenate(g_estimation, axis=0)
-        mean_g_estimation = g_estimation.mean(axis=0)
-        print("Average g_estimation:", mean_g_estimation)
+        # mean_g_estimation = g_estimation.mean(axis=0)
+        # print("Average g_estimation:", mean_g_estimation)
         gdf = pd.DataFrame(g_estimation, columns=['gE0', 'gE1'])
         df = pd.concat([df, gdf], axis=1)
 
@@ -85,8 +85,8 @@ def kfold_train(config, fold_data):
 
         if config['g_estimation']:
             counter_acc_g_estimation = np.concatenate(counter_acc_g_estimation, axis=0)
-            mean_counter_acc_g_estimation = counter_acc_g_estimation.mean(axis=0)
-            print("Average counter g_estimation:", mean_counter_acc_g_estimation)
+            # mean_counter_acc_g_estimation = counter_acc_g_estimation.mean(axis=0)
+            # print("Average counter g_estimation:", mean_counter_acc_g_estimation)
             counter_gdf = pd.DataFrame(counter_acc_g_estimation, columns=['counter_gE0', 'counter_gE1'])
             df = pd.concat([df, counter_gdf], axis=1)
 
@@ -157,6 +157,7 @@ def load_baize(config):
     articles = os.listdir(data_dir + baize_eval_dir)
     meta_df = pd.read_csv(baize_meta_path, sep='\t', index_col=0)
     session2language = meta_df.set_index('file')['language'].to_dict()
+    session2topic = meta_df.set_index('file')['topic'].to_dict()
 
     tensor_list = []
     for article in tqdm(articles):
@@ -165,14 +166,18 @@ def load_baize(config):
             # quality label
             label = df[config['reward']][config['action_num']-1]
 
-            # topic id
-            topic_id = session2language[article.replace('.tsv', '')]
+            # language and topic
+            language = session2language[article.replace('.tsv', '')]
+            topic = session2topic[article.replace('.tsv', '')]
+
 
             # a_i
-            cond_acs = list(df.a[:config['action_num'] - 1])
-            cond_acs = [a.strip() for a in cond_acs]
-            a = [df[config['target_a']][config['action_num'] - 1].strip()]
-            acs = cond_acs + a
+            # cond_acs = list(df.a[:config['action_num'] - 1])
+            # cond_acs = [a.strip() for a in cond_acs]
+            # a = [df[config['target_a']][config['action_num'] - 1].strip()]
+            # acs = [topic] + cond_acs + a
+            cond_acs = list(df[config['target_a']][:config['action_num']])
+            acs = [topic] + cond_acs
 
             # l_i
             ls = list(df.l[:config['action_num']])
@@ -195,7 +200,7 @@ def load_baize(config):
             counter_a_label = df[config['reward_counter']][config['action_num']-1]
 
             outputs = {'acs': acs_rep, 'ls': lcs_rep, 'acc_cond': acc_rep, 'counter_a_rep': counter_a_rep}
-            tensor_list.append((outputs, label, None, article, None, topic_id, counter_a_label))
+            tensor_list.append((outputs, label, language, article, None, topic, counter_a_label))
 
     return tensor_list
 
