@@ -2,24 +2,26 @@ import os
 import json
 from tqdm import tqdm
 import pandas as pd
+import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 from collections import defaultdict
+from tabulate import tabulate
 from sklearn.model_selection import KFold
 from sklearn.metrics import classification_report
 from models.base_sk import base_sk
 from argsparser import args
 from skeleton.sk_frame import sk_frame
-from utils import data_dir, cuda_available, coauthor_eval_dir, save_all_step, ckpt_dir, get_bert_rep, \
-    coauthor_meta_path, output_dir, add_noise, baize_eval_dir, baize_meta_path
+from utils import data_dir, cuda_available, save_all_step, ckpt_dir, get_bert_rep, output_dir, add_noise, eval_dir, \
+    meta_path
 
 
-def kfold_train(config, fold_data):
+def kfold_train(config, fold_data, print_table=True):
     kf = fold_data['kfold']
     raw_list = fold_data['data']
-    pred, true, scores, g_estimation, prob, articles = [], [], [], [], [], []
-    counter_acc_output, counter_acc_true, counter_scores, counter_acc_prob, counter_acc_g_estimation = [], [], [], [], []
+    pred, true, scores, g_estimation, prob, articles, test_learned_z = [], [], [], [], [], [], []
+    counter_acc_output, counter_acc_true, counter_scores, counter_acc_prob, counter_acc_g_estimation, counter_acc_learned_z = [], [], [], [], [], []
 
     for i, (train_index, test_index) in enumerate(kf.split(raw_list)):
         print("Fold", i)
@@ -38,6 +40,7 @@ def kfold_train(config, fold_data):
         true.extend(items['true'])
         prob.append(items['prob'])
         scores.append(items['test_result']['weighted avg']['f1-score'])
+        test_learned_z.append(items['test_learned_z'])
         print(items['test_result'])
         if config['g_estimation']:
             g_estimation.append(items['g_estimation'])
@@ -45,9 +48,8 @@ def kfold_train(config, fold_data):
         config['skeleton'].save_model(model, ckpt_dir + config['save_name'] + '_' + str(i) + '.pt')
 
         if config['save_counterfactual']:
-            counter_output, counter_true, counter_prob, counter_g_estimation = config['skeleton'].test_counterfactual(
-                model, config,
-                fold_iter)
+            counter_output, counter_true, counter_prob, counter_g_estimation, learned_counter_z = config[
+                'skeleton'].test_counterfactual(model, config, fold_iter)
             counter_acc_output.extend(counter_output)
             counter_acc_true.extend(counter_true)
             counter_acc_prob.append(counter_prob)
@@ -55,6 +57,7 @@ def kfold_train(config, fold_data):
                 classification_report(counter_true, counter_output, output_dict=True)['weighted avg']['f1-score'])
             if config['g_estimation']:
                 counter_acc_g_estimation.append(counter_g_estimation)
+            counter_acc_learned_z.append(learned_counter_z)
 
     print("Observed performance")
     print(classification_report(true, pred, digits=3))
@@ -73,6 +76,14 @@ def kfold_train(config, fold_data):
         gdf = pd.DataFrame(g_estimation, columns=['gE0', 'gE1'])
         df = pd.concat([df, gdf], axis=1)
 
+    if config['decompose_a']:
+        for i in range(config['action_num']):
+            step_learned_z = [zs[i] for zs in test_learned_z]
+            step_learned_z = torch.cat(step_learned_z, dim=0)
+            z_df = pd.DataFrame(step_learned_z.numpy(),
+                                columns=['z_' + str(i) + str(dim) for dim in range(step_learned_z.shape[1])])
+            df = pd.concat([df, z_df], axis=1)
+
     if config['save_counterfactual']:
         print("Counterfactual performance")
         print(classification_report(counter_acc_true, counter_acc_output, digits=3))
@@ -90,19 +101,43 @@ def kfold_train(config, fold_data):
             counter_gdf = pd.DataFrame(counter_acc_g_estimation, columns=['counter_gE0', 'counter_gE1'])
             df = pd.concat([df, counter_gdf], axis=1)
 
+        if config['decompose_a']:
+            for i in range(config['action_num']):
+                step_learned_counter_z = [zs[i] for zs in counter_acc_learned_z]
+                step_learned_counter_z = torch.cat(step_learned_counter_z, dim=0)
+                counter_z_df = pd.DataFrame(step_learned_counter_z.numpy(),
+                                            columns=['counter_z_' + str(i) + str(dim) for dim in
+                                                     range(step_learned_counter_z.shape[1])])
+                df = pd.concat([df, counter_z_df], axis=1)
+
     df.to_csv(output_dir + config['save_name'] + '.tsv', sep='\t')
+
+    if print_table and config['g_estimation']:
+        # Sample headers and data
+        headers = ["test - LR", "counterfatual - LR", "test - LR + G-E", "counterfactual - LR + G-E"]
+        data = [nn.MSELoss()(torch.tensor(df.true.to_list()), torch.tensor(df.p_formal.to_list())),
+                nn.MSELoss()(torch.tensor(df.counter_true.to_list()), torch.tensor(df.counter_p_formal.to_list())),
+                nn.MSELoss()(torch.tensor(df.true.to_list()), torch.tensor(df.gE1.to_list())),
+                nn.MSELoss()(torch.tensor(df.counter_true.to_list()), torch.tensor(df.counter_gE1.to_list()))]
+
+        # Format data to have 3 decimal places
+        formatted_data = [f"{value:.4f}" for value in data]
+
+        # Use tabulate to print the table
+        print(tabulate([formatted_data], headers=headers, tablefmt="grid"))
+
     return classification_report(true, pred, digits=3, output_dict=True)
 
 
-def load_coauthor(config):
-    articles = os.listdir(data_dir + coauthor_eval_dir)
-    meta_df = pd.read_csv(coauthor_meta_path, sep='\t', index_col=0)
+def load_coauthor(config, eval_dir=eval_dir, meta_path=meta_path):
+    articles = os.listdir(data_dir + eval_dir)
+    meta_df = pd.read_csv(meta_path, sep='\t', index_col=0)
     session2user = defaultdict(lambda: -1, dict(zip(list(meta_df.session_id), list(meta_df.user_id))))
     session2topic = defaultdict(lambda: 19, dict(zip(list(meta_df.session_id), list(meta_df.topic_id))))
 
     tensor_list = []
     for article in tqdm(articles):
-        df = pd.read_csv(data_dir + coauthor_eval_dir + article, sep='\t', index_col=0).fillna('')
+        df = pd.read_csv(data_dir + eval_dir + article, sep='\t', index_col=0).fillna('')
         if len(df) > config['action_num']:
             # quality label
             label = df[config['reward']][config['action_num']]
@@ -114,10 +149,10 @@ def load_coauthor(config):
             topic_id = session2topic[article.replace('.tsv', '')]
 
             # a_i
-            cond_acs = list(df.a[:config['action_num']])
-            cond_acs = [a.strip() for a in cond_acs]
-            a = [df[config['target_a']][config['action_num']].strip()]
-            acs = cond_acs + a
+            a_0 = [df.a[0]]
+            obs_a = list(df[config['target_a']][1:config['action_num'] + 1])
+            acs = a_0 + obs_a
+            acs = [a.strip() for a in acs]
 
             # l_i
             raw_ls = [sorted(json.loads(l), key=lambda x: x['index'], reverse=False) for l in
@@ -134,53 +169,50 @@ def load_coauthor(config):
 
             acs_rep = get_bert_rep(acs).detach().cpu()
             if config['noise_on_input']:
-                acs_rep[-1, :] = add_noise(acs_rep[-1, :])
+                acs_rep[1:, :] = add_noise(acs_rep[1:, :], noise_level=config['noise_level'])
             lcs_rep = get_bert_rep(ls).detach().cpu()
             acc_rep = get_bert_rep([acc_cond]).detach().cpu()
 
             # counterfactual
-            counter_a = df[config['target_counter_a']][config['action_num']]
-            counter_a_rep = get_bert_rep([counter_a]).detach().cpu()
+            counter_a = list(df[config['target_counter_a']][1: config['action_num'] + 1])
+            counter_a_rep = get_bert_rep(counter_a).detach().cpu()
             if config['noise_on_input']:
-                counter_a_rep = add_noise(counter_a_rep)
-            counter_a_label = df[config['reward_counter']][config['action_num']]
+                counter_a_rep = add_noise(counter_a_rep, noise_level=config['noise_level'])
+            counter_label = df[config['reward_counter']][config['action_num']]
 
             outputs = {'acs': acs_rep, 'ls': lcs_rep, 'acc_cond': acc_rep, 'counter_a_rep': counter_a_rep}
-            tensor_list.append((outputs, label, selects, article, user_id, topic_id, counter_a_label))
+            tensor_list.append((outputs, label, selects, article, user_id, topic_id, counter_label))
 
     config['total_user'] = len(set(session2user.values()))
 
     return tensor_list
 
 
-def load_baize(config):
-    articles = os.listdir(data_dir + baize_eval_dir)
-    meta_df = pd.read_csv(baize_meta_path, sep='\t', index_col=0)
+def load_baize(config, eval_dir=eval_dir, meta_path=meta_path):
+    articles = os.listdir(data_dir + eval_dir)
+    meta_df = pd.read_csv(meta_path, sep='\t', index_col=0)
     session2language = meta_df.set_index('file')['language'].to_dict()
     session2topic = meta_df.set_index('file')['topic'].to_dict()
 
     tensor_list = []
     for article in tqdm(articles):
-        df = pd.read_csv(data_dir + baize_eval_dir + article, sep='\t', index_col=0).fillna('')
-        if len(df) >= config['action_num']:
+        df = pd.read_csv(data_dir + eval_dir + article, sep='\t', index_col=0).fillna('')
+        if len(df) >= max(config['action_num'], 2):
             # quality label
-            label = df[config['reward']][config['action_num']-1]
+            label = df[config['reward']][config['action_num'] - 1]
 
             # language and topic
             language = session2language[article.replace('.tsv', '')]
             topic = session2topic[article.replace('.tsv', '')]
 
-
             # a_i
-            # cond_acs = list(df.a[:config['action_num'] - 1])
-            # cond_acs = [a.strip() for a in cond_acs]
-            # a = [df[config['target_a']][config['action_num'] - 1].strip()]
-            # acs = [topic] + cond_acs + a
             cond_acs = list(df[config['target_a']][:config['action_num']])
             acs = [topic] + cond_acs
 
             # l_i
-            ls = list(df.l[:config['action_num']])
+            partial_ls = list(df.l[:config['action_num']])
+            original_as = list(df.a[:config['action_num']])
+            ls = [x + '[SEP]' + y for x, y in zip(partial_ls, original_as)]
 
             # accumulative context
             acc_cond = ' '.join([item for pair in zip(ls, acs) for item in pair][:-1])
@@ -188,19 +220,68 @@ def load_baize(config):
             # representation of a_i, l_i, acc_cond
             acs_rep = get_bert_rep(acs).detach().cpu()
             if config['noise_on_input']:
-                acs_rep[-1, :] = add_noise(acs_rep[-1, :])
+                acs_rep[1:, :] = add_noise(acs_rep[1:, :], noise_level=config['noise_level'])
             lcs_rep = get_bert_rep(ls).detach().cpu()
             acc_rep = get_bert_rep([acc_cond]).detach().cpu()
 
             # counterfactual
-            counter_a = df[config['target_counter_a']][config['action_num']-1]
-            counter_a_rep = get_bert_rep([counter_a]).detach().cpu()
+            counter_a = list(df[config['target_counter_a']][:config['action_num']])
+            counter_a_rep = get_bert_rep(counter_a).detach().cpu()
             if config['noise_on_input']:
-                counter_a_rep = add_noise(counter_a_rep)
-            counter_a_label = df[config['reward_counter']][config['action_num']-1]
+                counter_a_rep = add_noise(counter_a_rep, noise_level=config['noise_level'])
+            counter_label = df[config['reward_counter']][config['action_num'] - 1]
 
             outputs = {'acs': acs_rep, 'ls': lcs_rep, 'acc_cond': acc_rep, 'counter_a_rep': counter_a_rep}
-            tensor_list.append((outputs, label, language, article, None, topic, counter_a_label))
+            tensor_list.append((outputs, label, language, article, None, topic, counter_label))
+
+    return tensor_list
+
+
+def load_dialcon(config, eval_dir=eval_dir, meta_path=meta_path):
+    articles = os.listdir(data_dir + eval_dir)
+    meta_df = pd.read_csv(meta_path, sep='\t', index_col=0)
+    session2source = meta_df.set_index('dialogue_id')['source'].to_dict()
+    session2minor = meta_df.set_index('dialogue_id')['TARGET'].to_dict()
+
+    tensor_list = []
+    for article in tqdm(articles):
+        df = pd.read_csv(data_dir + eval_dir + article, sep='\t', index_col=0).fillna('')
+        if len(df) >= max(config['action_num'], 2):
+            # quality label
+            label = df[config['reward']][config['action_num'] - 1]
+
+            # source and target
+            source = session2source[int(article.replace('.tsv', ''))]
+            minor = session2minor[int(article.replace('.tsv', ''))]
+
+            # a_i
+            cond_acs = list(df[config['target_a']][:config['action_num']])
+            acs = [minor] + cond_acs
+
+            # l_i
+            partial_ls = list(df.l[:config['action_num']])
+            original_as = list(df.a[:config['action_num']])
+            ls = [x + '[SEP]' + y for x, y in zip(partial_ls, original_as)]
+
+            # accumulative context
+            acc_cond = ' '.join([item for pair in zip(ls, acs) for item in pair][:-1])
+
+            # representation of a_i, l_i, acc_cond
+            acs_rep = get_bert_rep(acs).detach().cpu()
+            if config['noise_on_input']:
+                acs_rep[1:, :] = add_noise(acs_rep[1:, :], noise_level=config['noise_level'])
+            lcs_rep = get_bert_rep(ls).detach().cpu()
+            acc_rep = get_bert_rep([acc_cond]).detach().cpu()
+
+            # counterfactual
+            counter_a = list(df[config['target_counter_a']][:config['action_num']])
+            counter_a_rep = get_bert_rep(counter_a).detach().cpu()
+            if config['noise_on_input']:
+                counter_a_rep = add_noise(counter_a_rep, noise_level=config['noise_level'])
+            counter_label = df[config['reward_counter']][config['action_num'] - 1]
+
+            outputs = {'acs': acs_rep, 'ls': lcs_rep, 'acc_cond': acc_rep, 'counter_a_rep': counter_a_rep}
+            tensor_list.append((outputs, label, source, article, None, minor, counter_label))
 
     return tensor_list
 
@@ -212,6 +293,8 @@ def load_kfold_data(config, kfold=5):
         raw_list = load_coauthor(config)
     elif config['data_name'] == 'baize':
         raw_list = load_baize(config)
+    elif config['data_name'] == 'dialcon':
+        raw_list = load_dialcon(config)
 
     kf = KFold(n_splits=kfold, shuffle=True, random_state=16)
     kf.get_n_splits(raw_list)
@@ -239,10 +322,10 @@ def load_para():
               'decompose_cond': bool(args.decompose_cond),
               'decompose_cond_dim': args.decompose_cond_dim,
 
-              'c_mode': args.c_mode, 'save_counterfactual': bool(args.save_counterfactual),
+              'save_counterfactual': bool(args.save_counterfactual),
               'target_counter_a': args.target_counter_a, 'reward_counter': args.reward_counter,
 
-              'noise_on_input': bool(args.noise_on_input)}
+              'noise_on_input': bool(args.noise_on_input), 'noise_level': args.noise_level, 'split': args.split}
 
     loss_function = nn.CrossEntropyLoss()
     optimizer = optim.Adam
@@ -253,9 +336,9 @@ def load_para():
     config['save_all_step'] = save_all_step[config['model']]
 
     save_name = '_'.join(
-        [config['model'], config['learner'], config['data_name'], config['embedding'], config['label'],
-         config['reward'], str(config['action_num']), config['target_a'], 'decompose_a', str(config['decompose_a']),
-         'decompose_cond', str(config['decompose_cond']), 'z_mode', str(config['z_mode'])])
+        [config['model'], config['learner'], config['data_name'], 'split', str(config['split']), config['embedding'],
+         config['label'], config['reward'], str(config['action_num']), config['target_a'], 'decompose_a',
+         str(config['decompose_a']), 'decompose_cond', str(config['decompose_cond']), 'z_mode', str(config['z_mode'])])
     if config['decompose_a']:
         save_name += '_decompose_a_model_' + config['decompose_a_model'] + '_decompose_a_dim_' + str(
             config['decompose_a_dim'])
@@ -263,6 +346,10 @@ def load_para():
         save_name += '_decompose_cond_dim_' + str(config['decompose_cond_dim'])
     if config['save_counterfactual']:
         save_name += '_' + config['target_counter_a'] + '_' + config['reward_counter']
+    if config['noise_on_input']:
+        save_name += '_noise_level_' + str(config['noise_level'])
+
+    save_name += '_random_seed_' + str(args.random_seed)
 
     config['save_name'] = save_name
     print(config)

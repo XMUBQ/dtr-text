@@ -16,11 +16,13 @@ parser.add_argument('--decompose_a', type=int, default=0)
 parser.add_argument('--decompose_a_model', type=str, default='cVAE')
 parser.add_argument('--decompose_a_dim', type=int, default=50)
 parser.add_argument('--decompose_cond', type=int, default=0)
-parser.add_argument('--decompose_cond_dim', type=int, default=10)
+parser.add_argument('--decompose_cond_dim', type=int, default=50)
 parser.add_argument('--save_counterfactual', type=int, default=1)
-parser.add_argument('--c_mode', type=int, default=0)
 parser.add_argument('--target_counter_a',type=str,default='counterfactual_a')
 parser.add_argument('--reward_counter',type=str,default='counterfactual_reward')
+parser.add_argument('--split',type=int,default=20)
+parser.add_argument('--noise_on_input', type=int, default=1)
+parser.add_argument('--noise_level',type=float,default=1)
 
 # z learning
 parser.add_argument('--z_mode', type=int, default=0)
@@ -32,19 +34,13 @@ parser.add_argument('--g_estimation', type=int, default=1)
 parser.add_argument('--cuda', type=int, default=7)
 parser.add_argument('--epoch', type=int, default=1000)
 parser.add_argument('--testgap', type=int, default=50)
+parser.add_argument('--random_seed',type=int,default=80)
 
 # not used for now
 parser.add_argument('--embedding', type=str, default='bert')
+parser.add_argument('--c_mode', type=int, default=0)
 
 # temp args
 parser.add_argument('--regularizer',type=float, default=1.0)
-parser.add_argument('--split',type=int,default=20)
-parser.add_argument('--noise_on_input', type=int, default=1)
-
-# vae unused temporarily
-parser.add_argument('--vae_arch', type=str, default='full')
-parser.add_argument('--z_dim', type=int, default=10)
-parser.add_argument('--z_cond', type=str, default='his')
-parser.add_argument('--vae_loss', type=str, default='total')
 
 args = parser.parse_args()

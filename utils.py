@@ -4,10 +4,8 @@ import torch
 from collections import defaultdict
 from argsparser import args
 
-assert args.save_counterfactual == 0 or args.c_mode == args.z_mode
-
 # constant
-random_seed = 64  # or any of your favorite number
+random_seed = args.random_seed  # or any of your favorite number
 torch.manual_seed(random_seed)
 torch.cuda.manual_seed(random_seed)
 torch.backends.cudnn.deterministic = True
@@ -31,13 +29,9 @@ output_dir = 'results/'
 plot_dir = 'plot/'
 ckpt_dir = 'ckpt/'
 
-# coauthor related path
-coauthor_eval_dir = str(args.split) + 'split-dtr-data/' # 'altera1-dtr-data/', 'temp-dtr-data/'
-coauthor_meta_path = 'data/metadata.tsv'
-
-# baize related path
-baize_eval_dir = 'baize_temp_dir/'
-baize_meta_path = 'data/baize/metadata.tsv'
+# related path
+eval_dir=args.data_name+str(args.split)+'split/'
+meta_path='data/'+args.data_name+'/metadata.tsv'
 
 bert_dim = 768
 num_of_topic = 20
@@ -48,12 +42,13 @@ seq_action_dict['MLP'] = False
 
 
 # function
-def add_noise(outputs):
+def add_noise(outputs, noise_level=0):
     noise = torch.randn(outputs.size())
-    mean, std_dev = 0, 1.8
+    mean, std_dev = 0, noise_level
     adjusted_noise = noise * std_dev + mean
     outputs = outputs + adjusted_noise
     return outputs
+
 
 def get_bert_rep(ss):
     input_feat = tokenizer.batch_encode_plus(ss, max_length=512,
@@ -78,7 +73,7 @@ def list2iter(tensor_list):
     all_acs = torch.cat([t['acs'].unsqueeze(0) for t in tensor_rep], dim=0)
     all_ls = torch.cat([t['ls'].unsqueeze(0) for t in tensor_rep], dim=0)
     all_acc_cond = torch.cat([t['acc_cond'] for t in tensor_rep])
-    all_counter_a = torch.cat([t['counter_a_rep'] for t in tensor_rep])
+    all_counter_a = torch.cat([t['counter_a_rep'].unsqueeze(0) for t in tensor_rep], dim=0)
 
     return {'acs': all_acs, 'ls': all_ls, 'acc_cond': all_acc_cond, 'counter_a': all_counter_a, 'label': label,
             'counter_label': counter_a_label,

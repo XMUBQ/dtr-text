@@ -26,11 +26,13 @@ class sk_gMLP(sk_plus):
         self.loss_function = nn.MSELoss()
 
     @staticmethod
-    def separate_ls_acs(batch_x, step):
+    def separate_ls_acs(batch_x, step, decompose_a, decompose_a_dim):
         ls = batch_x[0][:, -bert_dim * step:]
         acs = batch_x[0][:, :-bert_dim * step]
         l_target = ls[:, -bert_dim:]
-        cond_target = torch.cat([acs[:, :bert_dim * step], ls[:, :-bert_dim]], dim=1)  # x, a0, l0,
+        cond_target = torch.cat(
+            [acs[:, :bert_dim + (decompose_a_dim if decompose_a else bert_dim) * (step - 1)],
+             ls[:, :-bert_dim]], dim=1)  # x, a0, l0,
         return l_target, cond_target
 
     def get_sample_prob(self, batch_x, sigma=1):
@@ -45,6 +47,11 @@ class sk_gMLP(sk_plus):
     def eval(self, data_loader, **kwargs):
         step = kwargs.get('step', None)
         assert step is not None
+        decompose_a = kwargs.get('decompose_a', None)
+        assert decompose_a is not None
+        decompose_a_dim = kwargs.get('decompose_a_dim', None)
+        assert decompose_a_dim is not None
+
         self.MLP.eval()
         accumulate_samples = []
         accumulate_prob = []
@@ -52,7 +59,7 @@ class sk_gMLP(sk_plus):
             if cuda_available:
                 batch_X[0] = batch_X[0].cuda()
 
-            l_target, cond_target = self.separate_ls_acs(batch_X, step)
+            _, cond_target = self.separate_ls_acs(batch_X, step, decompose_a, decompose_a_dim)
             # print("test",l_target.shape, a_target.shape)
             samples, prob = self.get_sample_prob(cond_target)
             accumulate_samples.append(samples.clone().detach().cpu())
@@ -64,6 +71,11 @@ class sk_gMLP(sk_plus):
         dataloader = self.numpy2tensor(x)
         step = kwargs.get('step', None)
         assert step is not None
+        decompose_a = kwargs.get('decompose_a')
+        assert decompose_a is not None
+        decompose_a_dim = kwargs.get('decompose_a_dim')
+        assert decompose_a_dim is not None
+
         self.MLP.train()
         best_f1 = 100000
         best_epoch = 0
@@ -74,8 +86,7 @@ class sk_gMLP(sk_plus):
                 if cuda_available:
                     batch_X[0] = batch_X[0].cuda()
 
-                l_target, cond_target = self.separate_ls_acs(batch_X, step)
-                # print("train",l_target.shape, a_target.shape)
+                l_target, cond_target = self.separate_ls_acs(batch_X, step, decompose_a, decompose_a_dim)
                 output = self.MLP(cond_target)
                 loss = self.loss_function(output, l_target)
 
@@ -101,5 +112,11 @@ class sk_gMLP(sk_plus):
     def predict(self, x, **kwargs):
         step = kwargs.get('step', None)
         assert step is not None
+        decompose_a = kwargs.get('decompose_a', None)
+        assert decompose_a is not None
+        decompose_a_dim = kwargs.get('decompose_a_dim', None)
+        assert decompose_a_dim is not None
+
         dataloader = self.numpy2tensor(x)
-        return self.eval(dataloader, step=step)
+
+        return self.eval(dataloader, step=step, decompose_a=decompose_a, decompose_a_dim=decompose_a_dim)
