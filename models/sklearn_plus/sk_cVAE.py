@@ -6,8 +6,6 @@ import torch.optim as optim
 from tqdm import tqdm
 from utils import cuda_available, ckpt_dir, plot_dir
 import matplotlib.pyplot as plt
-from math import exp
-
 
 class sk_cVAE(sk_vanilla_VAE):
     def __init__(self, n_components=50, outside_name=''):
@@ -24,7 +22,7 @@ class sk_cVAE(sk_vanilla_VAE):
             if cuda_available:
                 batch_x = batch_x.cuda()
                 condition = condition.cuda()
-            output = self.vae.encoder_mean(torch.cat((batch_x, condition), dim=1))
+            output, _ = self.vae.encode(torch.cat((batch_x, condition), dim=1))
             all_decoded_x.append(output.clone().detach().cpu())
         return torch.cat(all_decoded_x, dim=0).numpy()
 

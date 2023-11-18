@@ -14,9 +14,13 @@ class VAE(nn.Module):
         epsilon = torch.randn_like(z_logvar)
         return epsilon * ((0.5 * z_logvar).exp()) + z_mean
 
-    def forward(self, x):
+    def encode(self,x):
         encoded_mean = self.encoder_mean(x)
         encoded_var = self.encoder_var(x)
+        return encoded_mean, encoded_var
+
+    def forward(self, x):
+        encoded_mean, encoded_var = self.encode(x)
         encoded = self.reparameterize(encoded_mean, encoded_var)
         decoded = self.decoder(encoded)
         return encoded_mean, encoded_var, decoded

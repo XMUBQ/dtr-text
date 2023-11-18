@@ -24,7 +24,7 @@ class sk_vanilla_VAE(sk_plus):
         for batch_x in data_loader:
             if cuda_available:
                 batch_x[0] = batch_x[0].cuda()
-            output = self.vae.encoder_mean(batch_x[0])
+            output, _ = self.vae.encode(batch_x[0])
             all_decoded_x.append(output.clone().detach().cpu())
         return torch.cat(all_decoded_x, dim=0).numpy()
 

@@ -9,7 +9,6 @@ import numpy as np
 from collections import defaultdict
 from tabulate import tabulate
 from sklearn.model_selection import KFold
-from sklearn.metrics import classification_report
 from models.base_sk import base_sk
 from argsparser import args
 from skeleton.sk_frame import sk_frame
@@ -20,8 +19,8 @@ from utils import data_dir, cuda_available, save_all_step, ckpt_dir, get_bert_re
 def kfold_train(config, fold_data, print_table=True):
     kf = fold_data['kfold']
     raw_list = fold_data['data']
-    pred, true, scores, g_estimation, prob, articles, test_learned_z = [], [], [], [], [], [], []
-    counter_acc_output, counter_acc_true, counter_scores, counter_acc_prob, counter_acc_g_estimation, counter_acc_learned_z = [], [], [], [], [], []
+    pred, true, g_estimation, prob, articles, test_learned_z = [], [], [], [], [], []
+    counter_acc_output, counter_acc_true, counter_acc_prob, counter_acc_g_estimation, counter_acc_learned_z = [], [], [], [], []
 
     for i, (train_index, test_index) in enumerate(kf.split(raw_list)):
         print("Fold", i)
@@ -39,9 +38,7 @@ def kfold_train(config, fold_data, print_table=True):
         pred.extend(items['pred'])
         true.extend(items['true'])
         prob.append(items['prob'])
-        scores.append(items['test_result']['weighted avg']['f1-score'])
         test_learned_z.append(items['test_learned_z'])
-        print(items['test_result'])
         if config['g_estimation']:
             g_estimation.append(items['g_estimation'])
             print(items['g_estimation'].mean(axis=0))
@@ -53,15 +50,9 @@ def kfold_train(config, fold_data, print_table=True):
             counter_acc_output.extend(counter_output)
             counter_acc_true.extend(counter_true)
             counter_acc_prob.append(counter_prob)
-            counter_scores.append(
-                classification_report(counter_true, counter_output, output_dict=True)['weighted avg']['f1-score'])
             if config['g_estimation']:
                 counter_acc_g_estimation.append(counter_g_estimation)
             counter_acc_learned_z.append(learned_counter_z)
-
-    print("Observed performance")
-    print(classification_report(true, pred, digits=3))
-    print("Average score:", np.mean(scores), "Standard deviation:", np.std(scores))
 
     # saving results
     prob = np.concatenate(prob, axis=0)
@@ -86,8 +77,6 @@ def kfold_train(config, fold_data, print_table=True):
 
     if config['save_counterfactual']:
         print("Counterfactual performance")
-        print(classification_report(counter_acc_true, counter_acc_output, digits=3))
-        print("Average score:", np.mean(counter_scores), "Standard deviation:", np.std(counter_scores))
         df['counter_pred'] = counter_acc_output
         df['counter_true'] = counter_acc_true
         counter_acc_prob = np.concatenate(counter_acc_prob, axis=0)
@@ -126,7 +115,7 @@ def kfold_train(config, fold_data, print_table=True):
         # Use tabulate to print the table
         print(tabulate([formatted_data], headers=headers, tablefmt="grid"))
 
-    return classification_report(true, pred, digits=3, output_dict=True)
+    return
 
 
 def load_coauthor(config, eval_dir=eval_dir, meta_path=meta_path):
