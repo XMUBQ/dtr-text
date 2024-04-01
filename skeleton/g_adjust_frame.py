@@ -39,9 +39,7 @@ class g_adjust_frame(skeleton):
             true.extend(items['true'])
             prob.append(items['prob'])
             test_learned_z.append(items['test_learned_z'])
-            if config['g_estimation']:
-                g_estimation.append(items['g_estimation'])
-                print(items['g_estimation'].mean(axis=0))
+            g_estimation.append(items['g_estimation'])
 
             model.save_model(ckpt_dir + config['save_name'] + '_' + str(i) + '.pt')
 
@@ -50,8 +48,7 @@ class g_adjust_frame(skeleton):
             counter_acc_output.extend(counter_output)
             counter_acc_true.extend(counter_true)
             counter_acc_prob.append(counter_prob)
-            if config['g_estimation']:
-                counter_acc_g_estimation.append(counter_g_estimation)
+            counter_acc_g_estimation.append(counter_g_estimation)
             counter_acc_learned_z.append(learned_counter_z)
 
         # saving results
@@ -60,10 +57,9 @@ class g_adjust_frame(skeleton):
         df['article'] = articles
         df['pred'] = pred
         df['true'] = true
-        if config['g_estimation']:
-            g_estimation = np.concatenate(g_estimation, axis=0)
-            gdf = pd.DataFrame(g_estimation, columns=['gE0', 'gE1'])
-            df = pd.concat([df, gdf], axis=1)
+        g_estimation = np.concatenate(g_estimation, axis=0)
+        gdf = pd.DataFrame(g_estimation, columns=['gE0', 'gE1'])
+        df = pd.concat([df, gdf], axis=1)
 
         if config['decompose_a']:
             for i in range(config['action_num']):
@@ -80,10 +76,9 @@ class g_adjust_frame(skeleton):
         cp_df = pd.DataFrame(counter_acc_prob, columns=['counter_p_casual', 'counter_p_formal'])
         df = pd.concat([df, cp_df], axis=1)
 
-        if config['g_estimation']:
-            counter_acc_g_estimation = np.concatenate(counter_acc_g_estimation, axis=0)
-            counter_gdf = pd.DataFrame(counter_acc_g_estimation, columns=['counter_gE0', 'counter_gE1'])
-            df = pd.concat([df, counter_gdf], axis=1)
+        counter_acc_g_estimation = np.concatenate(counter_acc_g_estimation, axis=0)
+        counter_gdf = pd.DataFrame(counter_acc_g_estimation, columns=['counter_gE0', 'counter_gE1'])
+        df = pd.concat([df, counter_gdf], axis=1)
 
         if config['decompose_a']:
             for i in range(config['action_num']):
@@ -96,7 +91,7 @@ class g_adjust_frame(skeleton):
 
         df.to_csv(output_dir + config['save_name'] + '.tsv', sep='\t')
 
-        if print_table and config['g_estimation']:
+        if print_table:
             headers = ["test - LR", "counterfactual - LR", "test - LR + G-E", "counterfactual - LR + G-E"]
             data = [nn.MSELoss()(torch.tensor(df.true.to_list()), torch.tensor(df.p_formal.to_list())),
                     nn.MSELoss()(torch.tensor(df.counter_true.to_list()), torch.tensor(df.counter_p_formal.to_list())),

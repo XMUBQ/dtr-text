@@ -27,7 +27,6 @@ class g_adjust_model(base_model):
         self.decompose_cond_pca = PCA(n_components=config['decompose_cond_dim'])  # this is just for decompose condition
         self.decompose_cond = config['decompose_cond']
 
-        self.g_estimate = config['g_estimation']
         self.g_estimate_model = sk_gMLP(
             (self.decompose_a_dim if self.decompose_a else bert_dim) * (self.step - 1) + bert_dim * self.step, bert_dim,
             outside_name=config['save_name'])
@@ -126,13 +125,12 @@ class g_adjust_model(base_model):
         prob = self.model.predict_proba(input_feat)
 
         g_estimation = []
-        if self.g_estimate:
-            if mode == 'train' and (not test_counterfactual):
-                print("train conditional generation for L_step")
-                self.g_estimate_model.fit(input_feat, step=self.step, decompose_a=self.decompose_a,
-                                          decompose_a_dim=self.decompose_a_dim)
+        if mode == 'train' and (not test_counterfactual):
+            print("train conditional generation for L_step")
+            self.g_estimate_model.fit(input_feat, step=self.step, decompose_a=self.decompose_a,
+                                      decompose_a_dim=self.decompose_a_dim)
 
-            if mode == 'test':
-                g_estimation = self.cal_g_estimate(input_feat, self.sample_bank)
+        if mode == 'test':
+            g_estimation = self.cal_g_estimate(input_feat, self.sample_bank)
 
         return output, prob, g_estimation, learned_z, y, articles

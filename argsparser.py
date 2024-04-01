@@ -21,11 +21,8 @@ parser.add_argument('--split',type=int,default=20)
 parser.add_argument('--noise_on_input', type=int, default=1)
 parser.add_argument('--noise_level',type=float,default=1)
 
-# g estimation
-parser.add_argument('--g_estimation', type=int, default=1)
-
 # training parameters
 parser.add_argument('--cuda', type=int, default=7)
-parser.add_argument('--random_seed',type=int,default=80)
+parser.add_argument('--random_seed',type=int,default=64)
 
 args = parser.parse_args()

@@ -21,8 +21,6 @@ def load_para():
               'data_name': args.data_name, 'reward': args.reward,
               'target_a': args.target_a, 'action_num': args.action_num,
 
-              'g_estimation': bool(args.g_estimation),
-
               'decompose_a': bool(args.decompose_a), 'decompose_a_dim': args.decompose_a_dim,
               'decompose_a_model': args.decompose_a_model,
 
