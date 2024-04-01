@@ -6,7 +6,6 @@ from collections import OrderedDict
 class sk_plus:
     def __init__(self, outside_name=''):
         self.outside_name = outside_name
-        pass
 
     def eval(self, data_loader, **kwargs):
         raise NotImplementedError

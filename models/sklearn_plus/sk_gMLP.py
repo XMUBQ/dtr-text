@@ -1,6 +1,6 @@
 import torch
 from models.sklearn_plus.sk_plus import sk_plus
-from models.sklearn_plus.backbone.MLP import MLP
+from models.backbone.MLP import MLP
 import torch.optim as optim
 import torch.nn as nn
 import torch.distributions as dist

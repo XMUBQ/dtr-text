@@ -1,5 +1,5 @@
 from models.sklearn_plus.sk_vanilla_VAE import sk_vanilla_VAE
-from models.sklearn_plus.backbone.cVAE import cVAE
+from models.backbone.cVAE import cVAE
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -7,24 +7,29 @@ from tqdm import tqdm
 from utils import cuda_available, ckpt_dir, plot_dir
 import matplotlib.pyplot as plt
 
+
 class sk_cVAE(sk_vanilla_VAE):
-    def __init__(self, n_components=50, outside_name=''):
-        super(sk_cVAE, self).__init__(n_components=n_components, outside_name=outside_name)
+    def __init__(self, n_components=50, outside_name='', input_size=None, condition_size=None, output_size=None):
+        super(sk_cVAE, self).__init__(n_components=n_components, outside_name=outside_name, input_size=input_size,
+                                      condition_size=condition_size, output_size=output_size)
         self.learning_rate = 1e-4
         self.epochs = 500
         self.criterion = nn.MSELoss()
         self.kld_weight = 0
+        self.vae = None
+        self.vae = cVAE(self.input_size, self.condition_size, self.n_components, self.output_size)
 
     def eval(self, data_loader, **kwargs):
         self.vae.eval()
-        all_decoded_x = []
+        all_encoded_x = []
         for batch_x, condition in data_loader:
             if cuda_available:
                 batch_x = batch_x.cuda()
                 condition = condition.cuda()
-            output, _ = self.vae.encode(torch.cat((batch_x, condition), dim=1))
-            all_decoded_x.append(output.clone().detach().cpu())
-        return torch.cat(all_decoded_x, dim=0).numpy()
+            encoded_mean, encoded_var = self.vae.encode(torch.cat((batch_x, condition), dim=1))
+            output = self.vae.reparameterize(encoded_mean, encoded_var)
+            all_encoded_x.append(output.clone().detach().cpu())
+        return torch.cat(all_encoded_x, dim=0).numpy()
 
     def fit(self, x, y=None, **kwargs):
         assert y is None
@@ -33,8 +38,6 @@ class sk_cVAE(sk_vanilla_VAE):
         # fit into dataloader
         dataloader = self.numpy2tensor(x, **kwargs)
 
-        # initialize model
-        self.vae = cVAE(x.shape[1], condition.shape[1], self.n_components)
         if cuda_available:
             self.vae = self.vae.cuda()
         self.vae.train()
@@ -77,10 +80,10 @@ class sk_cVAE(sk_vanilla_VAE):
         plt.savefig(plot_dir + 'cvae_kl_loss_list.png')
         plt.close()
 
-        print(mse_loss_list[-1], kl_loss_list[-1])
+        # print(mse_loss_list[-1], kl_loss_list[-1])
 
         self.vae.load_state_dict(
-            torch.load(ckpt_dir + self.outside_name +'_temp_cvae_epoch_' + str(best_epoch) + '.pt'))
+            torch.load(ckpt_dir + self.outside_name + '_temp_cvae_epoch_' + str(best_epoch) + '.pt'))
 
         return self
 
@@ -95,5 +98,17 @@ class sk_cVAE(sk_vanilla_VAE):
         encoded_data = self.eval(dataloader)
         return encoded_data
 
-    def predict(self, x, **kwargs):
-        return self.transform(x)
+    def task_prediction(self,x,**kwargs):
+        self.vae.eval()
+        condition = kwargs.get('condition', None)
+        assert condition is not None
+        # fit into dataloader
+        dataloader = self.numpy2tensor(x, **kwargs)
+        all_decoded_x = []
+        for batch_x, condition in dataloader:
+            if cuda_available:
+                batch_x = batch_x.cuda()
+                condition = condition.cuda()
+            _, _, outputs = self.vae(batch_x, condition)
+            all_decoded_x.append(outputs.clone().detach().cpu())
+        return torch.cat(all_decoded_x, dim=0)

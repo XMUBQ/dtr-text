@@ -1,5 +1,5 @@
 from models.sklearn_plus.sk_plus import sk_plus
-from models.sklearn_plus.backbone.VAE import VAE
+from models.backbone.VAE import VAE
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -9,24 +9,29 @@ import matplotlib.pyplot as plt
 
 
 class sk_vanilla_VAE(sk_plus):
-    def __init__(self, n_components=50, outside_name=''):
+    def __init__(self, n_components=50, outside_name='',input_size=None, condition_size=None, output_size=None):
         super(sk_vanilla_VAE, self).__init__(outside_name=outside_name)
         self.n_components = n_components
-        self.vae = None
+        self.input_size=input_size
+        self.condition_size=condition_size
+        self.output_size=output_size
+
         self.learning_rate = 3e-3
         self.epochs = 500
         self.criterion = nn.MSELoss()
         self.kld_weight = 0
 
+        self.vae = VAE(self.input_size, self.n_components)  ### implementation of VIB for VAE is left for future
+
     def eval(self, data_loader, **kwargs):
         self.vae.eval()
-        all_decoded_x = []
+        all_encoded_x = []
         for batch_x in data_loader:
             if cuda_available:
                 batch_x[0] = batch_x[0].cuda()
             output, _ = self.vae.encode(batch_x[0])
-            all_decoded_x.append(output.clone().detach().cpu())
-        return torch.cat(all_decoded_x, dim=0).numpy()
+            all_encoded_x.append(output.clone().detach().cpu())
+        return torch.cat(all_encoded_x, dim=0).numpy()
 
     def vae_loss(self, decoded, x, encoded_mean, encoded_var):
         mse_loss = self.criterion(decoded, x)
@@ -38,8 +43,6 @@ class sk_vanilla_VAE(sk_plus):
         # fit into dataloader
         dataloader = self.numpy2tensor(x)
 
-        # initialize model
-        self.vae = VAE(x.shape[1], self.n_components)
         if cuda_available:
             self.vae = self.vae.cuda()
         self.vae.train()

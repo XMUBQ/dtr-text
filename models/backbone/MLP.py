@@ -2,14 +2,13 @@ import torch.nn as nn
 import torch
 
 class MLP(nn.Module):
-    def __init__(self, input_size, output_size, hidden=128, num_of_layer=2, step=2):
+    def __init__(self, input_size, output_size, hidden=128, num_of_layer=2):
         super(MLP, self).__init__()
 
         self.input_size=input_size
         self.output_size=output_size
         self.hidden=hidden
         self.num_of_layer=num_of_layer
-        self.step = step
 
         self.linear = []
         self.linear.append(nn.Linear(in_features=input_size, out_features=hidden))
