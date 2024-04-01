@@ -10,7 +10,8 @@ You have the option to run the model with or without style extractions.
 To enable style extractions, you can set the following parameters:
 
 ```bash
-python main.py --decompose_a=1 --decompose_a_model=CVAE  # For using CVAE (or PCA) for style extraction
+python main.py --decompose_a=1 --decompose_a_model=CVAE  
+# For using CVAE (or PCA) for style extraction
 ```
 
 #### Without Style Extractions
