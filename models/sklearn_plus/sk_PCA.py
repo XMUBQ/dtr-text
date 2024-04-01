@@ -6,7 +6,7 @@ class sk_PCA(sk_plus):
     def eval(self, data_loader, **kwargs):
         pass
 
-    def __init__(self, n_components=50, outside_name=''):
+    def __init__(self, n_components=50, outside_name='', input_size=None, condition_size=None, output_size=None):
         super(sk_PCA, self).__init__(outside_name=outside_name)
         self.pca = PCA(n_components)
 

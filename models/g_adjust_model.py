@@ -63,7 +63,7 @@ class g_adjust_model(base_model):
             for i in range(self.step):
                 step_a_target = acs[:, i + 1, :]
                 if mode == 'train' and (not test_counterfactual):
-                    print("fit", i + 1, "th cVAE")
+                    print("fit step", i + 1, self.decompose_a_model)
                     step_a_target = torch.tensor(
                         self.vae_list[i].fit_transform(step_a_target.numpy(), **condition_list[i]))
                 else:
@@ -126,7 +126,7 @@ class g_adjust_model(base_model):
 
         g_estimation = []
         if mode == 'train' and (not test_counterfactual):
-            print("train conditional generation for L_step")
+            print("train conditional generation")
             self.g_estimate_model.fit(input_feat, step=self.step, decompose_a=self.decompose_a,
                                       decompose_a_dim=self.decompose_a_dim)
 
