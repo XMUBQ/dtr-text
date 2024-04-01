@@ -1,6 +1,7 @@
 from transformers import BertTokenizer, BertModel
 import numpy as np
 import torch
+import torch.nn as nn
 from collections import defaultdict
 from argsparser import args
 
@@ -46,6 +47,11 @@ def add_noise(outputs, noise_level=0):
     outputs = outputs + adjusted_noise
     return outputs
 
+def initialize_weights(module):
+    if isinstance(module, nn.Linear):
+        nn.init.xavier_uniform_(module.weight)
+        if module.bias is not None:
+            nn.init.zeros_(module.bias)
 
 def get_bert_rep(ss):
     input_feat = tokenizer.batch_encode_plus(ss, max_length=512,

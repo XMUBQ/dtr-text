@@ -4,8 +4,7 @@ from models.backbone.MLP import MLP
 import torch.optim as optim
 import torch.nn as nn
 from tqdm import tqdm
-from utils import cuda_available, ckpt_dir, plot_dir
-from func_help import initialize_weights
+from utils import cuda_available, ckpt_dir, plot_dir, initialize_weights
 import matplotlib.pyplot as plt
 
 
