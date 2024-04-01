@@ -24,10 +24,9 @@ python main.py
 The results include performances on both observational and counterfactual data with or without G-estimation.
 
 ### Data Options
-You can specify the dataset using the `--data_name` flag. The available datasets are:
+You can specify the dataset using the `--data_name` flag. The available datasets (will be released soon)are:
 
 - `coauthor`: Dataset intended for co-authorship scenarios.
 - `baize`: A dataset focused on [specific domain or description].
 - `dialcon`: A dataset tailored for dialog contexts.
-
 ---
