@@ -25,7 +25,7 @@ The results include performances on both observational and counterfactual data w
 ### Data Options
 You can specify the dataset using the `--data_name` flag. The available datasets (will be released soon)are:
 
-- `coauthor`: Dataset intended for co-authorship scenarios.
-- `baize`: A dataset focused on [specific domain or description].
-- `dialcon`: A dataset tailored for dialog contexts.
+- [`coauthor`](https://arxiv.org/pdf/2201.06796.pdf): Designing a Human-AI Collaborative Writing Dataset for Exploring Language Model Capabilities.
+- [`baize`](https://arxiv.org/pdf/2304.01196.pdf): An Open-Source Chat Model with Parameter-Efficient Tuning on Self-Chat Data.
+- [`dialcon`](https://aclanthology.org/2022.emnlp-main.549.pdf): Human machine collaboration approaches to build a dialogue dataset for hate speech countering.
 ---
