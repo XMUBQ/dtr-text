@@ -23,7 +23,7 @@ python main.py
 The results include performances on both observational and counterfactual data with or without G-estimation.
 
 ### Data Options
-You can specify the dataset using the `--data_name` flag. The available datasets(https://drive.google.com/drive/folders/1-ViaF60IbjTA8DKKaJBduogLbU8HkWc1?usp=sharing) are:
+You can specify the dataset using the `--data_name` flag. The available [datasets](https://drive.google.com/drive/folders/1-ViaF60IbjTA8DKKaJBduogLbU8HkWc1?usp=sharing) are:
 
 - [`coauthor`](https://arxiv.org/pdf/2201.06796.pdf): Designing a Human-AI Collaborative Writing Dataset for Exploring Language Model Capabilities.
 - [`baize`](https://arxiv.org/pdf/2304.01196.pdf): An Open-Source Chat Model with Parameter-Efficient Tuning on Self-Chat Data.
